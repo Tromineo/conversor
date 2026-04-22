@@ -1,30 +1,65 @@
 # conversor.sh
 
-Script Bash que baixa o conteúdo de uma URL, extrai o texto do HTML e converte para um arquivo de áudio MP3.
+Script Bash que baixa o conteúdo de uma URL, extrai o texto do HTML e converte para um arquivo de áudio WAV usando o [Piper TTS](https://github.com/rhasspy/piper) localmente, sem dependência de internet para a geração do áudio.
 
 ## Dependências
 
 - **curl** — download do HTML
 - **lynx** — extração de texto a partir do HTML
-- **gtts-cli** — conversão de texto para fala (Google Text-to-Speech)
+- **piper** — conversão de texto para fala (TTS local)
 
 Instalação das dependências (Debian/Ubuntu):
 
 ```bash
 sudo apt install curl lynx
-pip install gTTS
+pip install piper-tts
+```
+
+### Modelos de voz
+
+Os modelos devem estar em `~/.local/share/piper/`. Cada modelo requer dois arquivos: `.onnx` e `.onnx.json`.
+
+**Português brasileiro (BR):**
+```bash
+mkdir -p ~/.local/share/piper
+wget -P ~/.local/share/piper \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx
+wget -P ~/.local/share/piper \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json
+```
+
+**Inglês americano (EN):**
+```bash
+wget -P ~/.local/share/piper \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+wget -P ~/.local/share/piper \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
 ```
 
 ## Uso
 
 ```bash
-./conversor.sh <URL>
+./conversor.sh <URL> [EN|BR]
 ```
 
-### Exemplo
+O segundo parâmetro é opcional. Se omitido, o modelo `BR` é usado por padrão.
+
+| Parâmetro | Modelo utilizado |
+|---|---|
+| `BR` (padrão) | `pt_BR-faber-medium` |
+| `EN` | `en_US-lessac-medium` |
+
+### Exemplos
 
 ```bash
+# Português brasileiro (padrão)
 ./conversor.sh https://exemplo.com/artigo
+
+# Português brasileiro (explícito)
+./conversor.sh https://exemplo.com/artigo BR
+
+# Inglês americano
+./conversor.sh https://exemplo.com/artigo EN
 ```
 
 ## Saída
@@ -34,19 +69,22 @@ O script gera dois arquivos no diretório atual, com o domínio e um timestamp n
 | Arquivo | Descrição |
 |---|---|
 | `<dominio>_<timestamp>.txt` | Texto extraído da página |
-| `<dominio>_<timestamp>.mp3` | Áudio gerado a partir do texto |
+| `<dominio>_<timestamp>.wav` | Áudio gerado a partir do texto |
 
 ## Fluxo de execução
 
-1. Recebe a URL como argumento
-2. Faz download do HTML com `curl`
-3. Extrai o texto legível com `lynx`
-4. Converte o texto em áudio MP3 com `gtts-cli`
+1. Recebe a URL e opcionalmente o idioma do modelo (`EN` ou `BR`)
+2. Valida o modelo selecionado em `~/.local/share/piper/`
+3. Faz download do HTML com `curl`
+4. Extrai o texto legível com `lynx`
+5. Converte o texto em áudio WAV com `piper` em background
+6. Exibe mensagens de progresso a cada 30 segundos enquanto a conversão estiver em andamento
 
 ## Tratamento de erros
 
 O script valida cada etapa e encerra com mensagem de erro caso:
-- Nenhum argumento seja fornecido
+- Nenhuma URL seja fornecida
+- O modelo de voz selecionado não seja encontrado em `~/.local/share/piper/`
 - O download do HTML falhe ou retorne vazio
 - A extração de texto gere arquivo vazio
 - O arquivo de áudio não seja criado
@@ -60,6 +98,12 @@ chmod +x conversor.sh
 ```
 
 ## Changelog
+
+### v2.0.0
+- Substituição do `gtts-cli` pelo `piper` (TTS local, sem internet)
+- Saída alterada de MP3 para WAV
+- Adicionado segundo parâmetro `[EN|BR]` para seleção do modelo de voz
+- Adicionado monitoramento de progresso a cada 30 segundos durante a conversão
 
 ### v1.0.0
 - Download de HTML via `curl`
