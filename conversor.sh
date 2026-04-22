@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Validação básica
 if [ -z "$1" ]; then
   echo "Uso: $0 <URL>"
   exit 1
@@ -34,9 +33,23 @@ fi
 echo "Texto salvo em: $OUTPUT_TEXT"
 
 echo "Convertendo texto em áudio..."
-gtts-cli -f "$OUTPUT_TEXT" --output "$OUTPUT_AUDIO"
+gtts-cli -f "$OUTPUT_TEXT" --output "$OUTPUT_AUDIO" &
+GTTS_PID=$!
 
-if [ ! -f "$OUTPUT_AUDIO" ]; then
+ELAPSED=0
+
+while kill -0 "$GTTS_PID" 2>/dev/null; do
+  sleep 30
+  ELAPSED=$((ELAPSED + 30))
+  if kill -0 "$GTTS_PID" 2>/dev/null; then
+    echo "Arquivo ainda sendo processado... (${ELAPSED}s)"
+  fi
+done
+
+wait "$GTTS_PID"
+GTTS_EXIT=$?
+
+if [ "$GTTS_EXIT" -ne 0 ] || [ ! -f "$OUTPUT_AUDIO" ]; then
   echo "Erro ao gerar áudio"
   exit 1
 fi
