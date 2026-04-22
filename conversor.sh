@@ -1,7 +1,12 @@
 #!/bin/bash
 
+PIPER_MODELS_DIR="${HOME}/.local/share/piper"
+
 if [ -z "$1" ]; then
-  echo "Uso: $0 <URL>"
+  echo "Uso: $0 <URL> [EN|BR]"
+  echo ""
+  echo "  EN  ->  en_US-lessac-medium"
+  echo "  BR  ->  pt_BR-faber-medium (padrão)"
   exit 1
 fi
 
@@ -13,7 +18,16 @@ DOMAIN=$(echo "$URL" | awk -F/ '{print $3}')
 TMP_HTML="/tmp/page_$TIMESTAMP.html"
 OUTPUT_TEXT="${DOMAIN}_$TIMESTAMP.txt"
 OUTPUT_AUDIO="${DOMAIN}_$TIMESTAMP.wav"
-PIPER_MODEL="${HOME}/.local/share/piper/pt_BR-faber-medium.onnx"
+case "${2^^}" in
+  EN) PIPER_MODEL_NAME="en_US-lessac-medium" ;;
+  BR|*) PIPER_MODEL_NAME="pt_BR-faber-medium" ;;
+esac
+PIPER_MODEL="${PIPER_MODELS_DIR}/${PIPER_MODEL_NAME}.onnx"
+
+if [ ! -f "$PIPER_MODEL" ]; then
+  echo "Erro: modelo '$PIPER_MODEL_NAME' não encontrado em $PIPER_MODELS_DIR"
+  exit 1
+fi
 
 echo "Baixando conteúdo da URL..."
 curl -s "$URL" -o "$TMP_HTML"
