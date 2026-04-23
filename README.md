@@ -7,11 +7,12 @@ Script Bash que baixa o conteúdo de uma URL, extrai o texto do HTML e converte 
 - **curl** — download do HTML
 - **lynx** — extração de texto a partir do HTML
 - **piper** — conversão de texto para fala (TTS local)
+- **sox** — concatenação dos arquivos WAV gerados por chunk
 
 Instalação das dependências (Debian/Ubuntu):
 
 ```bash
-sudo apt install curl lynx
+sudo apt install curl lynx sox
 pip install piper-tts
 ```
 
