@@ -48,23 +48,45 @@ fi
 echo "Texto salvo em: $OUTPUT_TEXT"
 
 echo "Convertendo texto em áudio..."
-cat "$OUTPUT_TEXT" | piper --model "$PIPER_MODEL" --output_file "$OUTPUT_AUDIO" &
-PIPER_PID=$!
 
-ELAPSED=0
+TOTAL_LINES=$(wc -l < "$OUTPUT_TEXT")
+[ "$TOTAL_LINES" -eq 0 ] && TOTAL_LINES=1
+CHUNK_LINES=50
+CHUNK_DIR=$(mktemp -d)
 
-while kill -0 "$PIPER_PID" 2>/dev/null; do
-  sleep 30
-  ELAPSED=$((ELAPSED + 30))
-  if kill -0 "$PIPER_PID" 2>/dev/null; then
-    echo "Arquivo ainda sendo processado... (${ELAPSED}s)"
+split -l "$CHUNK_LINES" "$OUTPUT_TEXT" "${CHUNK_DIR}/chunk_"
+
+CHUNK_FILES=("${CHUNK_DIR}"/chunk_*)
+TOTAL_CHUNKS=${#CHUNK_FILES[@]}
+CHUNK_WAVS=()
+PROCESSED=0
+
+for chunk in "${CHUNK_FILES[@]}"; do
+  chunk_wav="${chunk}.wav"
+  piper --model "$PIPER_MODEL" --output_file "$chunk_wav" < "$chunk" 2>/dev/null
+  if [ $? -ne 0 ]; then
+    printf "\n"
+    echo "Erro ao gerar áudio"
+    rm -rf "$CHUNK_DIR"
+    exit 1
   fi
+  CHUNK_WAVS+=("$chunk_wav")
+  PROCESSED=$((PROCESSED + 1))
+  PERCENT=$(( PROCESSED * 100 / TOTAL_CHUNKS ))
+  FILLED=$(( PERCENT / 2 ))
+  BAR=""
+  for ((k=0; k<50; k++)); do
+    if (( k < FILLED )); then BAR+="="; else BAR+="-"; fi
+  done
+  printf "\r  Processando: [%s] %3d%%" "$BAR" "$PERCENT"
 done
 
-wait "$PIPER_PID"
-PIPER_EXIT=$?
+printf "\n"
 
-if [ "$PIPER_EXIT" -ne 0 ] || [ ! -f "$OUTPUT_AUDIO" ]; then
+sox "${CHUNK_WAVS[@]}" "$OUTPUT_AUDIO" 2>/dev/null
+rm -rf "$CHUNK_DIR"
+
+if [ ! -f "$OUTPUT_AUDIO" ]; then
   echo "Erro ao gerar áudio"
   exit 1
 fi
