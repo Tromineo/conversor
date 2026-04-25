@@ -1,7 +1,7 @@
 #!/bin/bash
-
+## Define o diretório onde os modelos do Piper estão armazenados
 PIPER_MODELS_DIR="${HOME}/.local/share/piper"
-
+## Se o primeiro parametro for vazio, exibe a ajuda
 if [ -z "$1" ]; then
   echo "Uso: $0 <URL> [EN|BR]"
   echo ""
@@ -11,24 +11,27 @@ if [ -z "$1" ]; then
 fi
 
 URL="$1"
-
+## Gerar timestamp para criar arquivos únicos
 TIMESTAMP=$(date +%s)
+## Extrai o domínio da URL
 DOMAIN=$(echo "$URL" | awk -F/ '{print $3}')
-
+## Define o caminho dos arquivos de saída
 TMP_HTML="/tmp/page_$TIMESTAMP.html"
+
 OUTPUT_TEXT="${DOMAIN}_$TIMESTAMP.txt"
 OUTPUT_AUDIO="${DOMAIN}_$TIMESTAMP.wav"
+## Seleciona o modelo do Piper com base no segundo parâmetro (idioma)
 case "${2^^}" in
   EN) PIPER_MODEL_NAME="en_US-lessac-medium" ;;
   BR|*) PIPER_MODEL_NAME="pt_BR-faber-medium" ;;
 esac
 PIPER_MODEL="${PIPER_MODELS_DIR}/${PIPER_MODEL_NAME}.onnx"
-
+## Verifica se o modelo do Piper existe
 if [ ! -f "$PIPER_MODEL" ]; then
   echo "Erro: modelo '$PIPER_MODEL_NAME' não encontrado em $PIPER_MODELS_DIR"
   exit 1
 fi
-
+## Faz o download do conteúdo da URL e salva em um arquivo temporário
 echo "Baixando conteúdo da URL..."
 curl -s "$URL" -o "$TMP_HTML"
 
@@ -38,7 +41,18 @@ if [ ! -s "$TMP_HTML" ]; then
 fi
 
 echo "Extraindo texto do HTML..."
-lynx -dump -nolist "$TMP_HTML" > "$OUTPUT_TEXT"
+lynx -dump -nolist "$TMP_HTML" | \
+  grep -vE '^\s*(https?://|www\.)\S+' | \
+  sed 's/^[[:space:]]*[*•·–—-][[:space:]]*//' | \
+  sed 's/\[[0-9]*\]//g' | \
+  sed 's/[#@|<>{}\\^~`]//g' | \
+  sed 's/%/ por cento/g' | \
+  sed 's/&/ e /g' | \
+  sed 's/C++/C plus plus/g' | \
+  awk '{if ($0 ~ /^[[:upper:] ]{10,}$/) print tolower($0); else print}' | \
+  awk 'length($0) > 5 || $0 ~ /^[[:space:]]*$/' | \
+  cat -s \
+  > "$OUTPUT_TEXT"
 
 if [ ! -s "$OUTPUT_TEXT" ]; then
   echo "Erro ao extrair texto"
@@ -82,6 +96,8 @@ for chunk in "${CHUNK_FILES[@]}"; do
 done
 
 printf "\n"
+
+
 
 sox "${CHUNK_WAVS[@]}" "$OUTPUT_AUDIO" 2>/dev/null
 rm -rf "$CHUNK_DIR"
