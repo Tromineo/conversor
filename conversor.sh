@@ -42,15 +42,43 @@ fi
 
 echo "Extraindo texto do HTML..."
 lynx -dump -nolist "$TMP_HTML" | \
-  grep -vE '^\s*(https?://|www\.)\S+' | \
+  ## Remove linhas que são apenas URLs
+  grep -vE '^\s*(https?://|www\.)\S+$' | \
+  ## Remove URLs no meio de linhas
+  sed 's|https\?://[^[:space:]]*||g' | \
+  ## Remove marcadores de lista
   sed 's/^[[:space:]]*[*•·–—-][[:space:]]*//' | \
+  ## Remove referências numéricas tipo [1], [42]
   sed 's/\[[0-9]*\]//g' | \
-  sed 's/[#@|<>{}\\^~`]//g' | \
-  sed 's/%/ por cento/g' | \
-  sed 's/&/ e /g' | \
+  ## Remove símbolos problemáticos
+  sed 's/[#@|<>{}\\^~`_]//g' | \
+  ## Substitui % por " por cento"
+  sed 's/\([0-9]\)%/\1 por cento/g' | \
+  ## Substitui & por " e "
+  sed 's/ & / e /g' | \
+  ## Trata siglas técnicas comuns
   sed 's/C++/C plus plus/g' | \
-  awk '{if ($0 ~ /^[[:upper:] ]{10,}$/) print tolower($0); else print}' | \
+  sed 's/\.NET/ponto NET/g' | \
+  sed 's/\bAI\b/Inteligência Artificial/g' | \
+  sed 's/\bML\b/Machine Learning/g' | \
+  sed 's/\bAPI\b/A P I/g' | \
+  ## Expande abreviações comuns
+  sed 's/\bDr\./Doutor/g' | \
+  sed 's/\bSr\./Senhor/g' | \
+  sed 's/\bSra\./Senhora/g' | \
+  sed 's/\betc\./etcétera/g' | \
+  sed 's/\bex\./por exemplo/g' | \
+  sed 's/\bi\.e\./ou seja/g' | \
+  sed 's/\be\.g\./por exemplo/g' | \
+  ## Garante ponto final em linhas que terminam com letra (facilita pausa natural)
+  sed 's/\([a-záéíóúãõâêôçA-Z]\)$/\1./' | \
+  ## Converte linhas totalmente em CAPS para minúsculas
+  awk '{if ($0 ~ /^[[:upper:][:space:]]{10,}$/) print tolower($0); else print}' | \
+  ## Remove linhas muito curtas (menus, botões, rótulos)
   awk 'length($0) > 5 || $0 ~ /^[[:space:]]*$/' | \
+  ## Remove linhas que parecem cabeçalhos de navegação (só palavras isoladas em maiúscula)
+  grep -vE '^[[:space:]]*([A-ZÁÉÍÓÚ][a-záéíóú]+[[:space:]]*){1,3}$' | \
+  ## Colapsa múltiplas linhas em branco em uma só
   cat -s \
   > "$OUTPUT_TEXT"
 
