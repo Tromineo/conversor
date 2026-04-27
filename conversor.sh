@@ -41,45 +41,36 @@ if [ ! -s "$TMP_HTML" ]; then
 fi
 
 echo "Extraindo texto do HTML..."
-lynx -dump -nolist "$TMP_HTML" | \
-  ## Remove linhas que são apenas URLs
-  grep -vE '^\s*(https?://|www\.)\S+$' | \
-  ## Remove URLs no meio de linhas
-  sed 's|https\?://[^[:space:]]*||g' | \
-  ## Remove marcadores de lista
-  sed 's/^[[:space:]]*[*•·–—-][[:space:]]*//' | \
-  ## Remove referências numéricas tipo [1], [42]
-  sed 's/\[[0-9]*\]//g' | \
-  ## Remove símbolos problemáticos
-  sed 's/[#@|<>{}\\^~`_]//g' | \
-  ## Substitui % por " por cento"
-  sed 's/\([0-9]\)%/\1 por cento/g' | \
-  ## Substitui & por " e "
-  sed 's/ & / e /g' | \
-  ## Trata siglas técnicas comuns
-  sed 's/C++/C plus plus/g' | \
-  sed 's/\.NET/ponto NET/g' | \
-  sed 's/\bAI\b/Inteligência Artificial/g' | \
-  sed 's/\bML\b/Machine Learning/g' | \
-  sed 's/\bAPI\b/A P I/g' | \
-  ## Expande abreviações comuns
-  sed 's/\bDr\./Doutor/g' | \
-  sed 's/\bSr\./Senhor/g' | \
-  sed 's/\bSra\./Senhora/g' | \
-  sed 's/\betc\./etcétera/g' | \
-  sed 's/\bex\./por exemplo/g' | \
-  sed 's/\bi\.e\./ou seja/g' | \
-  sed 's/\be\.g\./por exemplo/g' | \
-  ## Garante ponto final em linhas que terminam com letra (facilita pausa natural)
-  sed 's/\([a-záéíóúãõâêôçA-Z]\)$/\1./' | \
-  ## Converte linhas totalmente em CAPS para minúsculas
-  awk '{if ($0 ~ /^[[:upper:][:space:]]{10,}$/) print tolower($0); else print}' | \
-  ## Remove linhas muito curtas (menus, botões, rótulos)
-  awk 'length($0) > 5 || $0 ~ /^[[:space:]]*$/' | \
-  ## Remove linhas que parecem cabeçalhos de navegação (só palavras isoladas em maiúscula)
-  grep -vE '^[[:space:]]*([A-ZÁÉÍÓÚ][a-záéíóú]+[[:space:]]*){1,3}$' | \
-  ## Colapsa múltiplas linhas em branco em uma só
-  cat -s \
+lynx -dump -nolist "$TMP_HTML" \
+  | grep -vE '^\s*(https?://|www\.)\S+$' \
+  | sed \
+      -e 's|https\?://[^[:space:]]*||g' \
+      -e 's/^[[:space:]]*[*•·–—-][[:space:]]*//' \
+      -e 's/\[[0-9]*\]//g' \
+      -e 's/[#@|<>{}\\^~`_]//g' \
+      -e 's/\([0-9]\)%/\1 por cento/g' \
+      -e 's/ \& / e /g' \
+      -e 's/C++/C plus plus/g' \
+      -e 's/\.NET/ponto NET/g' \
+      -e 's/\bAI\b/Inteligência Artificial/g' \
+      -e 's/\bML\b/Machine Learning/g' \
+      -e 's/\bAPI\b/A P I/g' \
+      -e 's/\bDr\./Doutor/g' \
+      -e 's/\bSr\./Senhor/g' \
+      -e 's/\bSra\./Senhora/g' \
+      -e 's/\betc\./etcétera/g' \
+      -e 's/\bex\./por exemplo/g' \
+      -e 's/\bi\.e\./ou seja/g' \
+      -e 's/\be\.g\./por exemplo/g' \
+      -e 's/\([a-záéíóúãõâêôçA-Z]\)$/\1./' \
+  | awk '
+      # Converte CAPS para minúsculas
+      /^[[:upper:][:space:]]{10,}$/ { print tolower($0); next }
+      # Remove linhas muito curtas (exceto linhas em branco)
+      length($0) > 5 || /^[[:space:]]*$/ { print }
+    ' \
+  | grep -vE '^[[:space:]]*([A-ZÁÉÍÓÚ][a-záéíóú]+[[:space:]]*){1,3}$' \
+  | cat -s \
   > "$OUTPUT_TEXT"
 
 if [ ! -s "$OUTPUT_TEXT" ]; then
