@@ -1,34 +1,44 @@
 #!/bin/bash
+## Carrega variáveis de ambiente do arquivo .env se existir
+ENV_FILE="$(dirname "$0")/.env"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
+  set +a
+fi
 
-PIPER_MODELS_DIR="${HOME}/.local/share/piper"
-
+## Verifica se a chave da API do Google foi definida
+if [ -z "$GOOGLE_API_KEY" ]; then
+  echo "Erro: variável GOOGLE_API_KEY não definida."
+  echo "Defina via variável de ambiente ou crie o arquivo .env com GOOGLE_API_KEY=sua_chave"
+  exit 1
+fi
+## Se o primeiro parametro for vazio, exibe a ajuda
 if [ -z "$1" ]; then
   echo "Uso: $0 <URL> [EN|BR]"
   echo ""
-  echo "  EN  ->  en_US-lessac-medium"
-  echo "  BR  ->  pt_BR-faber-medium (padrão)"
+  echo "  EN  ->  en-US-Wavenet-D"
+  echo "  BR  ->  pt-BR-Wavenet-A (padrão)"
   exit 1
 fi
 
 URL="$1"
-
+## Gerar timestamp para criar arquivos únicos
 TIMESTAMP=$(date +%s)
+## Extrai o domínio da URL
 DOMAIN=$(echo "$URL" | awk -F/ '{print $3}')
-
+## Define o caminho dos arquivos de saída
 TMP_HTML="/tmp/page_$TIMESTAMP.html"
+
 OUTPUT_TEXT="${DOMAIN}_$TIMESTAMP.txt"
 OUTPUT_AUDIO="${DOMAIN}_$TIMESTAMP.wav"
+## Seleciona a voz do Google com base no segundo parâmetro (idioma)
 case "${2^^}" in
-  EN) PIPER_MODEL_NAME="en_US-lessac-medium" ;;
-  BR|*) PIPER_MODEL_NAME="pt_BR-faber-medium" ;;
+  EN) LANGUAGE_CODE="en-US"; VOICE_NAME="en-US-Wavenet-D" ;;
+  BR|*) LANGUAGE_CODE="pt-BR"; VOICE_NAME="pt-BR-Wavenet-A" ;;
 esac
-PIPER_MODEL="${PIPER_MODELS_DIR}/${PIPER_MODEL_NAME}.onnx"
-
-if [ ! -f "$PIPER_MODEL" ]; then
-  echo "Erro: modelo '$PIPER_MODEL_NAME' não encontrado em $PIPER_MODELS_DIR"
-  exit 1
-fi
-
+## Faz o download do conteúdo da URL e salva em um arquivo temporário
 echo "Baixando conteúdo da URL..."
 curl -s "$URL" -o "$TMP_HTML"
 
@@ -38,7 +48,60 @@ if [ ! -s "$TMP_HTML" ]; then
 fi
 
 echo "Extraindo texto do HTML..."
-lynx -dump -nolist "$TMP_HTML" > "$OUTPUT_TEXT"
+lynx -dump -nolist "$TMP_HTML" \
+  | grep -vE '^\s*(https?://|www\.)\S+$' \
+  | sed \
+      -e 's|https\?://[^[:space:]]*||g' \
+      -e 's/^[[:space:]]*[*•·–—-][[:space:]]*//' \
+      -e 's/\[[0-9]*\]//g' \
+      -e 's/[#@|<>{}\\^~`_]//g' \
+      -e 's/\([0-9]\)%/\1 por cento/g' \
+      -e 's/ \& / e /g' \
+      -e 's/C++/C plus plus/g' \
+      -e 's/\.NET/ponto NET/g' \
+      -e 's/\bAI\b/Inteligência Artificial/g' \
+      -e 's/\bML\b/Machine Learning/g' \
+      -e 's/\bAPI\b/A P I/g' \
+      -e 's/\bDr\./Doutor/g' \
+      -e 's/\bSr\./Senhor/g' \
+      -e 's/\bSra\./Senhora/g' \
+      -e 's/\betc\./etcétera/g' \
+      -e 's/\bex\./por exemplo/g' \
+      -e 's/\bi\.e\./ou seja/g' \
+      -e 's/\be\.g\./por exemplo/g' \
+      -e 's/\([a-záéíóúãõâêôçA-Z]\)$/\1./' \
+  | awk '
+      BEGIN {
+          # Heurística: poucas palavras + palavras genéricas de navegação/UI = remove
+          split("home about menu subscribe signin login register contact share follow tags search categories newsletter youtube twitter facebook instagram linkedin feed activity comments copyright privacy cookie button avatar rss archive author tag category next prev previous sobre inicio categorias assinar entrar cadastrar contato compartilhar seguir buscar pagina proximo anterior mim", gw, " ")
+          for (i in gw) generic[gw[i]] = 1
+      }
+      # Remove linhas com padrões de botão/UI
+      /\(BUTTON\)/ { next }
+      # Converte CAPS para minúsculas
+      /^[[:upper:][:space:]]{10,}$/ { print tolower($0); next }
+      # Remove linhas muito curtas (exceto linhas em branco)
+      length($0) <= 5 && !/^[[:space:]]*$/ { next }
+      {
+          # Heurística: ≤ 6 palavras E ≥ 1 palavra genérica → navegação/UI → remove
+          nw = split($0, words, /[[:space:]]+/)
+          wc = 0; gc = 0
+          for (i = 1; i <= nw; i++) {
+              w = words[i]
+              gsub(/[^[:alpha:]]/, "", w)
+              if (length(w) == 0) continue
+              wc++
+              if (generic[tolower(w)]) gc++
+          }
+          if (wc > 0 && wc <= 6 && gc >= 1) next
+          print
+      }
+    ' \
+  | sed 's/^[[:space:]]*//' \
+  | grep -vE '^([A-ZÁÉÍÓÚ][a-záéíóú]+[[:space:]]*){1,3}$' \
+  | awk 'NF==0 || !seen[$0]++' \
+  | cat -s \
+  > "$OUTPUT_TEXT"
 
 if [ ! -s "$OUTPUT_TEXT" ]; then
   echo "Erro ao extrair texto"
@@ -49,12 +112,9 @@ echo "Texto salvo em: $OUTPUT_TEXT"
 
 echo "Convertendo texto em áudio..."
 
-TOTAL_LINES=$(wc -l < "$OUTPUT_TEXT")
-[ "$TOTAL_LINES" -eq 0 ] && TOTAL_LINES=1
-CHUNK_LINES=50
 CHUNK_DIR=$(mktemp -d)
 
-split -l "$CHUNK_LINES" "$OUTPUT_TEXT" "${CHUNK_DIR}/chunk_"
+split -C 4500 "$OUTPUT_TEXT" "${CHUNK_DIR}/chunk_"
 
 CHUNK_FILES=("${CHUNK_DIR}"/chunk_*)
 TOTAL_CHUNKS=${#CHUNK_FILES[@]}
@@ -63,10 +123,24 @@ PROCESSED=0
 
 for chunk in "${CHUNK_FILES[@]}"; do
   chunk_wav="${chunk}.wav"
-  piper --model "$PIPER_MODEL" --output_file "$chunk_wav" < "$chunk" 2>/dev/null
-  if [ $? -ne 0 ]; then
+  TEXT_CONTENT=$(cat "$chunk")
+  RESPONSE=$(curl -s -X POST \
+    "https://texttospeech.googleapis.com/v1/text:synthesize?key=$GOOGLE_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg text "$TEXT_CONTENT" --arg lang "$LANGUAGE_CODE" --arg voice "$VOICE_NAME" \
+      '{input: {text: $text}, voice: {languageCode: $lang, name: $voice}, audioConfig: {audioEncoding: "LINEAR16"}}')")
+  AUDIO_CONTENT=$(echo "$RESPONSE" | jq -r '.audioContent // empty' 2>/dev/null)
+  if [ -z "$AUDIO_CONTENT" ]; then
     printf "\n"
-    echo "Erro ao gerar áudio"
+    echo "Erro ao gerar áudio. Resposta da API:"
+    echo "$RESPONSE" | jq '.' 2>/dev/null || echo "$RESPONSE"
+    rm -rf "$CHUNK_DIR"
+    exit 1
+  fi
+  echo "$AUDIO_CONTENT" | base64 -d > "$chunk_wav"
+  if [ ! -s "$chunk_wav" ]; then
+    printf "\n"
+    echo "Erro ao decodificar áudio do chunk"
     rm -rf "$CHUNK_DIR"
     exit 1
   fi
@@ -82,6 +156,8 @@ for chunk in "${CHUNK_FILES[@]}"; do
 done
 
 printf "\n"
+
+
 
 sox "${CHUNK_WAVS[@]}" "$OUTPUT_AUDIO" 2>/dev/null
 rm -rf "$CHUNK_DIR"
