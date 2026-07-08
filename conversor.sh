@@ -1,11 +1,7 @@
 #!/bin/bash
 
-<<<<<<< Updated upstream
 PIPER_MODELS_DIR="${HOME}/.local/share/piper"
-
-=======
-## Arquivo de log
-LOG_FILE="$(dirname "$0")/conversor.log"
+LOG_FILE="/tmp/conversor_$(date +%s).log"
 
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -13,26 +9,113 @@ log() {
   echo "$msg" >> "$LOG_FILE"
 }
 
-## Verifica se a chave da API do Google foi definida
-if [ -z "$GOOGLE_API_KEY" ]; then
-  log "ERRO: variável GOOGLE_API_KEY não definida."
-  log "Defina via variável de ambiente ou crie o arquivo .env com GOOGLE_API_KEY=sua_chave"
-  exit 1
-fi
-## Se o primeiro parametro for vazio, exibe a ajuda
->>>>>>> Stashed changes
+pos_processamento() {
+  local arquivo="$1"
+
+  # Remove separadores horizontais (linha com 5+ underscores)
+  sed -i '/^[[:space:]]*_\{5,\}[[:space:]]*$/d' "$arquivo"
+
+  # Remove linhas com menus de navegação (separados por │)
+  sed -i '/│/d' "$arquivo"
+
+  # Remove linhas com copyright (©)
+  sed -i '/^[[:space:]]*©/d' "$arquivo"
+
+  # Remove rótulos (BUTTON) gerados pelo lynx
+  sed -i 's/[[:space:]]*(BUTTON)[^[:space:]]*//' "$arquivo"
+
+  # Remove campos de formulário renderizados pelo lynx (5+ underscores)
+  sed -i 's/__\{5,\}//' "$arquivo"
+
+  # Remove marcadores de notas de rodapé (^1, ^2, ...)
+  sed -i 's/\^[0-9]\+//g' "$arquivo"
+
+  # Remove símbolo de retorno de rodapé (↩)
+  sed -i 's/↩//g' "$arquivo"
+
+  # Remove asteriscos e outros símbolos de ênfase em markdown
+  sed -i 's/\*\*//g' "$arquivo"  # ** (markdown bold)
+  sed -i 's/__//g' "$arquivo"    # __ (markdown bold alt)
+  sed -i 's/\*//g' "$arquivo"    # * individual (bullet points, emphasis)
+
+  # Remove símbolos especiais usando perl para melhor suporte a Unicode
+  perl -i -pe 's/[«»]//g' "$arquivo"           # Aspas angulares
+  perl -i -pe 's/[""„‟]//g' "$arquivo"         # Aspas tipográficas
+  perl -i -pe 's/–/ /g' "$arquivo"             # Travessão (substitui por espaço)
+  perl -i -pe 's/—/ /g' "$arquivo"             # Travessão longo
+  perl -i -pe 's/[{}]//g' "$arquivo"           # Chaves vazias
+  perl -i -pe 's/\[\]//g' "$arquivo"           # Colchetes vazios para checkboxes
+  perl -i -pe 's/\[x\]//g' "$arquivo"          # Checkboxes marcados
+  perl -i -pe 's/\[X\]//g' "$arquivo"          # Checkboxes marcados maiúsculos
+
+  # Remove símbolos decorativos comuns
+  perl -i -pe 's/✓//g' "$arquivo"              # Checkmark
+  perl -i -pe 's/✗//g' "$arquivo"              # X mark
+  perl -i -pe 's/→//g' "$arquivo"              # Seta
+  perl -i -pe 's/←//g' "$arquivo"              # Seta reversa
+  perl -i -pe 's/↓//g' "$arquivo"              # Seta para baixo
+  perl -i -pe 's/↑//g' "$arquivo"              # Seta para cima
+  perl -i -pe 's/•//g' "$arquivo"              # Bullet point
+  perl -i -pe 's/°//g' "$arquivo"              # Grau
+
+  # Remove parênteses vazios ou com apenas números
+  perl -i -pe 's/\([0-9]+\)//g' "$arquivo"     # (1), (2), etc. (referências)
+  perl -i -pe 's/\(\)//g' "$arquivo"           # Parênteses vazios
+
+  # Remove símbolos matemáticos e monetários problemáticos
+  perl -i -pe 's/†//g' "$arquivo"              # Obelisco
+  perl -i -pe 's/‡//g' "$arquivo"              # Duplo obelisco
+  perl -i -pe 's/¶//g' "$arquivo"              # Símbolo de parágrafo
+  perl -i -pe 's/§//g' "$arquivo"              # Símbolo de seção
+  perl -i -pe 's/™//g' "$arquivo"              # Trademark
+  perl -i -pe 's/®//g' "$arquivo"              # Registered
+  perl -i -pe 's/×//g' "$arquivo"              # Multiplicação
+  perl -i -pe 's/↩//g' "$arquivo"              # Seta de retorno
+  
+  # Remove linhas inteiras de apenas símbolos ou vazias de conteúdo significativo
+  sed -i '/^[^a-zA-Z0-9]*$/d' "$arquivo"       # Linhas com apenas símbolos/espaços
+  
+  # Remove linhas com padrões comuns de boilerplate e navegação
+  sed -i '/[Cc]ontinue reading/d' "$arquivo"   # Continue reading...
+  sed -i '/[Jj]ava[Ss]cript/d' "$arquivo"      # JavaScript required
+  sed -i '/[Ss]ubstack/d' "$arquivo"           # Substack boilerplate
+  sed -i '/[Rr]eady for more/d' "$arquivo"     # Ready for more?
+  sed -i '/^[[:space:]]*No posts\.[[:space:]]*$/d' "$arquivo"  # No posts.
+  sed -i '/RSS feed/d' "$arquivo"              # RSS feed headers
+  sed -i '/[Cc]onsider subscrib/d' "$arquivo"  # Subscribe CTAs
+  sed -i '/Privacy.*Terms/d' "$arquivo"        # Privacy · Terms footer
+  sed -i "/[Hh]ere'*s.*preview/d" "$arquivo"   # Here's a preview...
+  sed -i '/[Gg]et the app/d' "$arquivo"        # Get the app
+  sed -i '/^[[:space:]]*Start your/d' "$arquivo"  # Start your...
+
+  # Colapsa múltiplas linhas em branco consecutivas em uma única
+  cat -s "$arquivo" > "${arquivo}.tmp" && mv "${arquivo}.tmp" "$arquivo"
+}
+
 if [ -z "$1" ]; then
-  echo "Uso: $0 <URL> [EN|BR]"
+  echo "Uso: $0 <URL|ARQUIVO> [EN|BR]"
+  echo ""
+  echo "  URL      -> Endereço HTTP/HTTPS para baixar e processar"
+  echo "  ARQUIVO  -> Caminho para arquivo de texto local"
   echo ""
   echo "  EN  ->  en_US-lessac-medium"
   echo "  BR  ->  pt_BR-faber-medium (padrão)"
   exit 1
 fi
 
-URL="$1"
-
+INPUT="$1"
 TIMESTAMP=$(date +%s)
-DOMAIN=$(echo "$URL" | awk -F/ '{print $3}')
+
+# Detectar se é arquivo local ou URL
+if [ -f "$INPUT" ]; then
+  # É um arquivo local
+  INPUT_TYPE="FILE"
+  DOMAIN=$(basename "$INPUT" | sed 's/\.[^.]*$//')
+else
+  # Trata como URL
+  INPUT_TYPE="URL"
+  DOMAIN=$(echo "$INPUT" | awk -F/ '{print $3}')
+fi
 
 TMP_HTML="/tmp/page_$TIMESTAMP.html"
 OUTPUT_TEXT="${DOMAIN}_$TIMESTAMP.txt"
@@ -41,7 +124,6 @@ case "${2^^}" in
   EN) PIPER_MODEL_NAME="en_US-lessac-medium" ;;
   BR|*) PIPER_MODEL_NAME="pt_BR-faber-medium" ;;
 esac
-<<<<<<< Updated upstream
 PIPER_MODEL="${PIPER_MODELS_DIR}/${PIPER_MODEL_NAME}.onnx"
 
 if [ ! -f "$PIPER_MODEL" ]; then
@@ -49,86 +131,42 @@ if [ ! -f "$PIPER_MODEL" ]; then
   exit 1
 fi
 
-echo "Baixando conteúdo da URL..."
-=======
-## Faz o download do conteúdo da URL e salva em um arquivo temporário
-log "Iniciando conversão: URL=$URL IDIOMA=${2^^:-BR}"
-log "Baixando conteúdo da URL..."
->>>>>>> Stashed changes
-curl -s "$URL" -o "$TMP_HTML"
+if [ "$INPUT_TYPE" = "FILE" ]; then
+  echo "Lendo arquivo local..."
+  if [ ! -s "$INPUT" ]; then
+    log "ERRO: arquivo não encontrado ou vazio: $INPUT"
+    exit 1
+  fi
+  # Copia o arquivo como texto de entrada
+  cp "$INPUT" "$OUTPUT_TEXT"
+else
+  echo "Baixando conteúdo da URL..."
+  curl -s "$INPUT" -o "$TMP_HTML"
 
-if [ ! -s "$TMP_HTML" ]; then
-  log "ERRO: falha ao baixar conteúdo da URL"
-  exit 1
+  if [ ! -s "$TMP_HTML" ]; then
+    log "ERRO: falha ao baixar conteúdo da URL"
+    exit 1
+  fi
+
+  echo "Extraindo texto do HTML..."
+  lynx -dump -nolist "$TMP_HTML" > "$OUTPUT_TEXT"
 fi
 
-<<<<<<< Updated upstream
-echo "Extraindo texto do HTML..."
-lynx -dump -nolist "$TMP_HTML" > "$OUTPUT_TEXT"
-=======
-log "Extraindo texto do HTML..."
-lynx -dump -nolist "$TMP_HTML" \
-  | grep -vE '^\s*(https?://|www\.)\S+$' \
-  | sed \
-      -e 's|https\?://[^[:space:]]*||g' \
-      -e 's/^[[:space:]]*[*•·–—-][[:space:]]*//' \
-      -e 's/\[[0-9]*\]//g' \
-      -e 's/[#@|<>{}\\^~`_]//g' \
-      -e 's/\([0-9]\)%/\1 por cento/g' \
-      -e 's/ \& / e /g' \
-      -e 's/C++/C plus plus/g' \
-      -e 's/\.NET/ponto NET/g' \
-      -e 's/\bAI\b/Inteligência Artificial/g' \
-      -e 's/\bML\b/Machine Learning/g' \
-      -e 's/\bAPI\b/A P I/g' \
-      -e 's/\bDr\./Doutor/g' \
-      -e 's/\bSr\./Senhor/g' \
-      -e 's/\bSra\./Senhora/g' \
-      -e 's/\betc\./etcétera/g' \
-      -e 's/\bex\./por exemplo/g' \
-      -e 's/\bi\.e\./ou seja/g' \
-      -e 's/\be\.g\./por exemplo/g' \
-      -e 's/\([a-záéíóúãõâêôçA-Z]\)$/\1./' \
-  | awk '
-      BEGIN {
-          # Heurística: poucas palavras + palavras genéricas de navegação/UI = remove
-          split("home about menu subscribe signin login register contact share follow tags search categories newsletter youtube twitter facebook instagram linkedin feed activity comments copyright privacy cookie button avatar rss archive author tag category next prev previous sobre inicio categorias assinar entrar cadastrar contato compartilhar seguir buscar pagina proximo anterior mim", gw, " ")
-          for (i in gw) generic[gw[i]] = 1
-      }
-      # Remove linhas com padrões de botão/UI
-      /\(BUTTON\)/ { next }
-      # Converte CAPS para minúsculas
-      /^[[:upper:][:space:]]{10,}$/ { print tolower($0); next }
-      # Remove linhas muito curtas (exceto linhas em branco)
-      length($0) <= 5 && !/^[[:space:]]*$/ { next }
-      {
-          # Heurística: ≤ 6 palavras E ≥ 1 palavra genérica → navegação/UI → remove
-          nw = split($0, words, /[[:space:]]+/)
-          wc = 0; gc = 0
-          for (i = 1; i <= nw; i++) {
-              w = words[i]
-              gsub(/[^[:alpha:]]/, "", w)
-              if (length(w) == 0) continue
-              wc++
-              if (generic[tolower(w)]) gc++
-          }
-          if (wc > 0 && wc <= 6 && gc >= 1) next
-          print
-      }
-    ' \
-  | sed 's/^[[:space:]]*//' \
-  | grep -vE '^([A-ZÁÉÍÓÚ][a-záéíóú]+[[:space:]]*){1,3}$' \
-  | awk 'NF==0 || !seen[$0]++' \
-  | cat -s \
-  > "$OUTPUT_TEXT"
->>>>>>> Stashed changes
-
 if [ ! -s "$OUTPUT_TEXT" ]; then
-  log "ERRO: falha ao extrair texto do HTML"
+  log "ERRO: falha ao processar o arquivo/HTML"
   exit 1
 fi
 
 log "Texto salvo em: $OUTPUT_TEXT"
+
+# Limpar arquivo HTML temporário se foi criado
+if [ "$INPUT_TYPE" = "URL" ] && [ -f "$TMP_HTML" ]; then
+  rm -f "$TMP_HTML"
+fi
+
+log "Pós-processando texto..."
+pos_processamento "$OUTPUT_TEXT"
+log "Pós-processamento concluído."
 
 log "Convertendo texto em áudio ($TOTAL_CHUNKS chunks)..."
 
@@ -149,18 +187,7 @@ for chunk in "${CHUNK_FILES[@]}"; do
   piper --model "$PIPER_MODEL" --output_file "$chunk_wav" < "$chunk" 2>/dev/null
   if [ $? -ne 0 ]; then
     printf "\n"
-<<<<<<< Updated upstream
     echo "Erro ao gerar áudio"
-=======
-    log "ERRO: falha ao gerar áudio no chunk $PROCESSED. Resposta: $(echo "$RESPONSE" | jq -c '.' 2>/dev/null || echo "$RESPONSE")"
-    rm -rf "$CHUNK_DIR"
-    exit 1
-  fi
-  echo "$AUDIO_CONTENT" | base64 -d > "$chunk_wav"
-  if [ ! -s "$chunk_wav" ]; then
-    printf "\n"
-    log "ERRO: falha ao decodificar áudio do chunk $PROCESSED"
->>>>>>> Stashed changes
     rm -rf "$CHUNK_DIR"
     exit 1
   fi

@@ -1,6 +1,8 @@
 # conversor.sh
 
-Script Bash que baixa o conteúdo de uma URL, extrai o texto do HTML e converte para um arquivo de áudio WAV usando o [Piper TTS](https://github.com/rhasspy/piper) localmente, sem dependência de internet para a geração do áudio.
+Script Bash que converte texto para áudio WAV usando o [Piper TTS](https://github.com/rhasspy/piper) localmente. Suporta duas formas de entrada:
+- **URLs**: Baixa o conteúdo, extrai o texto do HTML e converte para áudio
+- **Arquivos locais**: Lê arquivos de texto diretamente e converte para áudio
 
 ## Dependências
 
@@ -40,8 +42,12 @@ wget -P ~/.local/share/piper \
 ## Uso
 
 ```bash
-./conversor.sh <URL> [EN|BR]
+./conversor.sh <URL|ARQUIVO> [EN|BR]
 ```
+
+**Parâmetros:**
+- `URL|ARQUIVO` — Endereço HTTP/HTTPS ou caminho para arquivo de texto local
+- `[EN|BR]` — Idioma/modelo (opcional, padrão: `BR`)
 
 O segundo parâmetro é opcional. Se omitido, o modelo `BR` é usado por padrão.
 
@@ -52,6 +58,7 @@ O segundo parâmetro é opcional. Se omitido, o modelo `BR` é usado por padrão
 
 ### Exemplos
 
+#### Com URLs
 ```bash
 # Português brasileiro (padrão)
 ./conversor.sh https://exemplo.com/artigo
@@ -61,6 +68,18 @@ O segundo parâmetro é opcional. Se omitido, o modelo `BR` é usado por padrão
 
 # Inglês americano
 ./conversor.sh https://exemplo.com/artigo EN
+```
+
+#### Com Arquivos Locais
+```bash
+# Arquivo local em português (padrão)
+./conversor.sh ~/documentos/meu-texto.txt
+
+# Arquivo local em português (explícito)
+./conversor.sh /caminho/para/arquivo.txt BR
+
+# Arquivo local em inglês
+./conversor.sh ~/Downloads/documento.txt EN
 ```
 
 ## Saída
@@ -74,12 +93,23 @@ O script gera dois arquivos no diretório atual, com o domínio e um timestamp n
 
 ## Fluxo de execução
 
+### Com URLs
 1. Recebe a URL e opcionalmente o idioma do modelo (`EN` ou `BR`)
 2. Valida o modelo selecionado em `~/.local/share/piper/`
 3. Faz download do HTML com `curl`
 4. Extrai o texto legível com `lynx`
-5. Converte o texto em áudio WAV com `piper` em background
-6. Exibe mensagens de progresso a cada 30 segundos enquanto a conversão estiver em andamento
+5. Aplica pós-processamento ao texto
+6. Converte o texto em áudio WAV com `piper` em chunks
+7. Concatena chunks de áudio com `sox`
+
+### Com Arquivos Locais
+1. Recebe o caminho do arquivo e opcionalmente o idioma do modelo (`EN` ou `BR`)
+2. Valida que o arquivo existe e não está vazio
+3. Valida o modelo selecionado em `~/.local/share/piper/`
+4. Copia o arquivo de texto para processamento
+5. Aplica pós-processamento ao texto
+6. Converte o texto em áudio WAV com `piper` em chunks
+7. Concatena chunks de áudio com `sox`
 
 ## Tratamento de erros
 
@@ -100,11 +130,19 @@ chmod +x conversor.sh
 
 ## Changelog
 
+### v2.1.0
+-  **Novo**: Suporte a arquivos locais em texto
+-  **Novo**: Detecção automática de tipo de entrada (URL vs arquivo local)
+-  Sem necessidade de flags - o tipo é detectado automaticamente
+-  Melhorado: Tratamento de erros para ambos os modos
+-  Melhorado: Limpeza automática de arquivos temporários
+-  Documentação atualizada
+
 ### v2.0.0
 - Substituição do `gtts-cli` pelo `piper` (TTS local, sem internet)
 - Saída alterada de MP3 para WAV
 - Adicionado segundo parâmetro `[EN|BR]` para seleção do modelo de voz
-- Adicionado monitoramento de progresso a cada 30 segundos durante a conversão
+- Adicionado monitoramento de progresso durante a conversão
 
 ### v1.0.0
 - Download de HTML via `curl`
